@@ -1,0 +1,781 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#14213d">
+<title>PCCM Poll</title>
+<!-- Libraries are bundled locally so the page needs nothing from CDNs (hospital networks often block them). -->
+<script src="vendor/firebase-app-compat.js"></script>
+<script src="vendor/firebase-firestore-compat.js"></script>
+<script src="vendor/qrcode.min.js"></script>
+<style>
+:root{--bg:#f4f6f9;--card:#fff;--ink:#14213d;--muted:#6b7280;--accent:#1d4ed8;--ok:#16a34a;--bad:#dc2626;--line:#e5e7eb}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;background:var(--bg);color:var(--ink);font-size:17px;line-height:1.4}
+a{color:var(--accent)}
+h1,h2,h3{margin:.2em 0 .5em;line-height:1.2}
+h3{font-size:16px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);margin-top:1.2em}
+.muted{color:var(--muted)}
+.wrap{max-width:560px;margin:0 auto;padding:20px 16px}
+.wrap.wide{max-width:900px}
+.center{text-align:center}
+input,textarea,select{width:100%;font:inherit;padding:11px 12px;border:1px solid #cbd5e1;border-radius:10px;background:#fff;margin:5px 0}
+input[type=radio]{width:auto;margin:0 6px 0 0}
+label{cursor:pointer}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;font:inherit;font-weight:600;padding:9px 15px;border-radius:10px;border:1px solid #cbd5e1;background:#fff;color:var(--ink);cursor:pointer;text-decoration:none;white-space:nowrap}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.danger{color:var(--bad)}
+.btn.big{width:100%;padding:16px;font-size:19px;margin-top:8px}
+.btn.sm{padding:6px 12px;font-size:14px}
+.btn.xs{padding:3px 8px;font-size:13px}
+.btn:disabled{opacity:.5;cursor:default}
+.link{background:none;border:0;color:var(--accent);font:inherit;cursor:pointer;padding:4px 0}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.banner{background:#fff7ed;border:1px solid #fdba74;border-radius:10px;padding:10px 14px;font-size:15px;margin:10px 0}
+.card{background:#fff;border:1px solid var(--line);border-radius:12px;padding:14px 16px;margin:10px 0}
+.foot{margin-top:40px;font-size:14px}
+.topbar{display:flex;justify-content:space-between;font-size:14px;margin-bottom:14px;gap:10px}
+.topbar a{color:var(--muted)}
+.qcard{background:#fff;border-radius:14px;padding:16px;border:1px solid var(--line);margin-bottom:6px}
+.qcard img{max-width:100%;border-radius:10px;display:block;margin:0 auto 12px}
+.qcard h2{font-size:22px;margin:0}
+.opts{display:grid;gap:10px;margin:14px 0}
+.opt{display:flex;align-items:center;gap:12px;text-align:left;font:inherit;font-size:18px;padding:12px 14px;border-radius:12px;border:2px solid var(--line);background:#fff;cursor:pointer;min-height:58px;color:var(--ink)}
+.opt:not(:disabled):active{transform:scale(.98)}
+.opt:disabled{cursor:default}
+.opt.mine{border-color:var(--accent);background:#eff6ff}
+.opt.right{border-color:var(--ok);background:#f0fdf4}
+.opt.wrong{border-color:var(--bad);background:#fef2f2}
+.ltr{display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:50%;background:var(--ink);color:#fff;font-weight:700;flex:none;font-size:16px}
+.opt.right .ltr{background:var(--ok)}.opt.wrong .ltr{background:var(--bad)}
+.status{text-align:center;font-weight:600;padding:12px;border-radius:10px;background:#fff;border:1px solid var(--line)}
+.status.ok{color:var(--ok);border-color:var(--ok)}.status.bad{color:var(--bad);border-color:var(--bad)}
+.mine-text{background:#fff;border-radius:12px;padding:12px 14px;border:2px solid var(--accent);margin:12px 0;white-space:pre-wrap}
+.bigcheck{font-size:64px;color:var(--ok)}
+.cardgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(105px,1fr));gap:10px;margin:12px 0}
+.cardgrid.big{grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:18px}
+.pcard{aspect-ratio:3/4;border-radius:12px;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:10px;text-align:center;font:inherit}
+.pcard.down{background:linear-gradient(135deg,#1e3a8a,#2563eb);color:#fff;font-size:30px;font-weight:700;border:0;cursor:pointer;box-shadow:0 4px 12px rgba(0,0,0,.2)}
+.pcard.down:disabled{opacity:.55;cursor:default}
+.pcard.up{background:#fff;border:2px solid var(--ok)}
+.pcard.up .topic{font-weight:700;font-size:15px}
+.pcard.up .who{font-size:13px;color:var(--muted);margin-top:6px}
+.big .pcard.down{font-size:44px}.big .pcard.up .topic{font-size:22px}.big .pcard.up .who{font-size:16px}
+.mycard{border:2px solid var(--ok)}
+/* presenter */
+.present .ph{display:flex;align-items:center;gap:14px;padding:8px 14px;background:#fff;border-bottom:1px solid var(--line);min-height:64px}
+.ptitle{font-weight:700;flex:1;cursor:pointer;font-size:18px}
+.join{font-size:15px;white-space:nowrap}
+.code{font-size:24px;font-weight:800;letter-spacing:3px;background:var(--ink);color:#fff;padding:2px 12px;border-radius:8px;margin-left:8px}
+#qrsm{width:48px;height:48px}#qrsm img{width:48px;height:48px}
+.pbody{display:flex;height:calc(100vh - 65px)}
+#stage{flex:1;overflow:auto;padding:24px 36px}
+#panel{width:400px;border-left:1px solid var(--line);background:#fff;overflow:auto;padding:12px 16px 40px;display:none;flex:none}
+.panel-open #panel{display:block}
+.tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin-bottom:10px}
+.tabs button{flex:1;background:none;border:0;border-bottom:3px solid transparent;padding:10px 4px;font:inherit;font-weight:600;color:var(--muted);cursor:pointer}
+.tabs button.on{color:var(--accent);border-bottom-color:var(--accent)}
+.qi{display:flex;align-items:center;gap:6px;padding:8px 6px;border-bottom:1px solid var(--line);font-size:14px}
+.qi.active{background:#eff6ff}
+.qi .n{color:var(--muted);width:20px;flex:none}
+.qi .t{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tag{font-size:11px;text-transform:uppercase;background:#e5e7eb;border-radius:6px;padding:2px 6px;color:var(--muted)}
+.optrow{display:flex;align-items:center;gap:6px}
+.optrow .ltr{width:26px;height:26px;font-size:13px}
+.optrow input[type=text]{margin:3px 0}
+#imgprev img{max-height:120px;border-radius:8px;display:block;margin-top:6px}
+.drop{border:2px dashed #cbd5e1;border-radius:10px;padding:10px;text-align:center;color:var(--muted);font-size:14px;margin:8px 0}
+.drop.over{border-color:var(--accent);background:#eff6ff}
+.stageq .qimg{max-height:46vh;max-width:100%;border-radius:10px;display:block;margin:0 auto 16px}
+.qtext{font-size:clamp(24px,3vw,42px);margin:0 0 14px}
+.bars{display:grid;gap:10px;max-width:1000px;margin:12px 0}
+.bar{display:grid;grid-template-columns:minmax(180px,1fr) 2fr 60px;align-items:center;gap:12px;font-size:22px}
+.bar .lbl{display:flex;align-items:center;gap:10px}
+.bar .track{height:34px;background:#e5e7eb;border-radius:8px;overflow:hidden}
+.bar .fill{height:100%;background:var(--accent);transition:width .4s}
+.bar.right .fill{background:var(--ok)}.bar.right .lbl{color:var(--ok);font-weight:700}.bar.right .ltr{background:var(--ok)}
+.bar .cnt{font-weight:700;text-align:right}
+.texts{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:10px;margin:12px 0}
+.tx{background:#fff;border-radius:10px;padding:10px 14px;border:1px solid var(--line);font-size:19px;white-space:pre-wrap}
+.tx b{display:block;font-size:13px;color:var(--muted)}
+.controls{position:sticky;bottom:0;display:flex;gap:10px;align-items:center;background:rgba(244,246,249,.96);padding:12px 0;margin-top:20px;flex-wrap:wrap}
+.pill{font-size:12px;font-weight:700;letter-spacing:.06em;padding:4px 10px;border-radius:99px;background:#e5e7eb}
+.pill.open{background:#dcfce7;color:#166534}.pill.closed{background:#fee2e2;color:#991b1b}.pill.revealed{background:#dbeafe;color:#1e40af}
+.lobby{text-align:center}
+.lobby .bigcode{font-size:80px;font-weight:800;letter-spacing:8px;line-height:1}
+.lobby .url{font-size:26px;margin:6px 0 16px}
+#qrbig{display:inline-block;background:#fff;padding:14px;border-radius:14px}
+.chips{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin-top:16px}
+.chip{background:#fff;border:1px solid var(--line);border-radius:99px;padding:6px 14px;font-size:18px}
+table{border-collapse:collapse;width:100%;font-size:15px}
+th,td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--line)}
+th{font-size:12px;text-transform:uppercase;color:var(--muted)}
+td.num,th.num{text-align:right}
+.overlay{position:fixed;inset:0;background:rgba(20,33,61,.55);display:flex;align-items:center;justify-content:center;padding:20px;z-index:10}
+.modal{background:#fff;border-radius:14px;padding:20px;max-width:800px;width:100%;max-height:90vh;overflow:auto}
+.slist .card{display:flex;align-items:center;gap:12px}
+.expl{background:#fff;border-left:4px solid var(--ok);padding:12px 16px;border-radius:8px;font-size:20px;margin:12px 0;max-width:1000px;white-space:pre-wrap}
+.fellow .expl{font-size:16px}
+.modal.wide{max-width:1000px}
+.banklist{max-height:55vh;overflow:auto;border:1px solid var(--line);border-radius:10px;margin:10px 0}
+.banklist .qi{cursor:pointer}
+.banklist .qi input{width:auto;margin:0}
+.chipx{font-size:11px;background:#eff6ff;color:#1e40af;border-radius:6px;padding:1px 6px;margin-right:3px;white-space:nowrap}
+.stat{font-size:12px;color:var(--muted);white-space:nowrap}
+.warn{color:#b45309;font-weight:600}
+.imp td{font-size:13px;vertical-align:top}
+.hint{font-size:12px;color:var(--muted);margin-left:auto}
+details summary{cursor:pointer;color:var(--accent);font-size:14px}
+#promptbox{font-size:13px;font-family:ui-monospace,Menlo,monospace}
+.slist .card .sn{flex:1}
+@media(max-width:800px){.pbody{flex-direction:column;height:auto}#panel{width:100%;border-left:0}.join,#qrsm{display:none}#stage{padding:16px}.bar{grid-template-columns:1fr;gap:4px;font-size:18px}}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script>
+/* ================= CONFIG ================= */
+const CONFIG = {
+  // 1) Paste your Firebase web config object here (see README). null = demo mode (this browser only).
+  firebase: null,
+  // 2) PIN for the presenter screens (fellows never need it)
+  teacherPin: '2468',
+  title: 'PCCM Poll',
+};
+
+/* ================= STORE ================= */
+const Store = (() => {
+  if (CONFIG.firebase) {
+    firebase.initializeApp(CONFIG.firebase);
+    const fs = firebase.firestore();
+    // Long polling fallback keeps realtime updates working behind strict corporate proxies.
+    try { fs.settings({ experimentalAutoDetectLongPolling: true, ignoreUndefinedProperties: true }); } catch (e) {}
+    const D = s => s.exists ? { id: s.id, ...s.data() } : null;
+    const C = s => s.docs.map(d => ({ id: d.id, ...d.data() }));
+    return {
+      mode: 'firebase',
+      get: p => fs.doc(p).get().then(D),
+      getCol: p => fs.collection(p).get().then(C),
+      set: (p, d) => fs.doc(p).set(d, { merge: true }),
+      put: (p, d) => fs.doc(p).set(d),
+      del: p => fs.doc(p).delete(),
+      onDoc: (p, cb) => fs.doc(p).onSnapshot(s => cb(D(s)), e => console.error(e)),
+      onCol: (p, cb) => fs.collection(p).onSnapshot(s => cb(C(s)), e => console.error(e)),
+    };
+  }
+  const KEY = 'pccm_poll_local';
+  const load = () => { try { return JSON.parse(localStorage.getItem(KEY) || '{}'); } catch (e) { return {}; } };
+  const save = d => localStorage.setItem(KEY, JSON.stringify(d));
+  const subs = new Set();
+  const notify = () => subs.forEach(f => f());
+  window.addEventListener('storage', e => { if (e.key === KEY) notify(); });
+  const seg = p => p.split('/').length;
+  const isObj = v => v && typeof v === 'object' && !Array.isArray(v);
+  const merge = (a, b) => { for (const k in b) { if (isObj(b[k]) && isObj(a[k])) merge(a[k], b[k]); else a[k] = b[k]; } return a; };
+  const colDocs = (d, p) => Object.keys(d).filter(k => k.startsWith(p + '/') && seg(k) === seg(p) + 1).map(k => ({ id: k.slice(p.length + 1), ...d[k] }));
+  const docOf = (d, p) => d[p] ? { id: p.split('/').pop(), ...d[p] } : null;
+  return {
+    mode: 'local',
+    get: async p => docOf(load(), p),
+    getCol: async p => colDocs(load(), p),
+    set: async (p, x) => { const d = load(); d[p] = merge(d[p] || {}, JSON.parse(JSON.stringify(x))); save(d); notify(); },
+    put: async (p, x) => { const d = load(); d[p] = JSON.parse(JSON.stringify(x)); save(d); notify(); },
+    del: async p => { const d = load(); delete d[p]; save(d); notify(); },
+    onDoc: (p, cb) => { const f = () => cb(docOf(load(), p)); subs.add(f); setTimeout(f, 0); return () => subs.delete(f); },
+    onCol: (p, cb) => { const f = () => cb(colDocs(load(), p)); subs.add(f); setTimeout(f, 0); return () => subs.delete(f); },
+  };
+})();
+
+/* ================= HELPERS ================= */
+const app = document.getElementById('app');
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const nameKey = n => String(n).trim().toLowerCase().replace(/\s+/g, ' ');
+const docKey = n => nameKey(n).replace(/[^a-z0-9]+/g, '_') || 'anon';
+const genCode = () => { const A = 'ABCDEFGHJKLMNPQRSTUVWXYZ'; let s = ''; for (let i = 0; i < 4; i++) s += A[Math.floor(Math.random() * A.length)]; return s; };
+const fmtDate = t => t ? new Date(t).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : '';
+const LETTERS = 'ABCDEF';
+const joinUrl = code => `${location.origin}${location.pathname}#/join/${code}`;
+const shortUrl = () => (location.origin + location.pathname).replace(/^https?:\/\//, '').replace(/\/(index\.html)?$/, '');
+const pinOK = () => localStorage.getItem('pccm_pin') === CONFIG.teacherPin;
+const cardList = s => Object.entries((s && s.cards) || {}).filter(([, c]) => c).map(([id, c]) => ({ id, ...c })).sort((a, b) => a.order - b.order);
+const modeBanner = () => Store.mode === 'local' ? `<div class="banner"><b>Demo mode</b> — data stays in this browser only (open a second tab to play the fellow side). Paste your Firebase config into <code>index.html</code> to go live for the whole room.</div>` : '';
+function makeQR(el, text, size) { if (!el || !window.QRCode) return; el.innerHTML = ''; new QRCode(el, { text, width: size, height: size, correctLevel: QRCode.CorrectLevel.M }); }
+function downloadCSV(name, rows) {
+  // UTF-8 BOM so Excel opens it with correct characters; CSV opens directly in Excel.
+  const csv = '﻿' + rows.map(r => r.map(v => `"${String(v ?? '').replace(/"/g, '""')}"`).join(',')).join('\r\n');
+  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' })); a.download = name; a.click();
+}
+const splitTags = s => String(s || '').split(/[,;]/).map(t => t.trim()).filter(Boolean);
+const newId = () => 'q' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
+function gptPrompt(topic, n) {
+  return `Write ${n || 10} board-style multiple-choice questions for pulmonary and critical care fellows on: ${topic || '[topic]'}.
+Mix clinical vignettes and physiology. One best answer each. Output ONLY the questions in exactly this format, no headings, no commentary:
+
+1. [question stem]
+A. [option]
+B. [option]
+C. [option]
+D. [option]
+Answer: [letter]
+Explanation: [1-3 sentences on why, and why the others are wrong]
+
+2. ...`;
+}
+
+/* ---- bulk paste parser: numbered stems, lettered options, "Answer: B", optional "Explanation:"; also tab-separated spreadsheet rows ---- */
+function parseBulk(raw) {
+  const clean = String(raw || '').replace(/\r/g, '').replace(/\*\*|__|`/g, '').replace(/^#+\s*/gm, '').replace(/^[\-\*•]\s+(?=\(?[A-Fa-f]\s*[\.\):\-])/gm, '');
+  const lines = clean.split('\n').map(l => l.trim());
+  const nonEmpty = lines.filter(Boolean);
+  const tabby = nonEmpty.filter(l => (l.match(/\t/g) || []).length >= 2);
+  if (tabby.length && tabby.length >= nonEmpty.length * 0.5) return parseTSV(nonEmpty);
+  const reQ = /^(?:q(?:uestion)?\s*)?(\d{1,3})\s*[\.\):]\s+(.*)$/i;
+  const reQlabel = /^question\s*[:\-–—]\s*(.+)$/i;
+  const reOpt = /^\(?([A-Fa-f])\s*[\.\):\-–—]\s*(.+)$/;
+  const reAns = /^(?:correct\s+answer|answer|correct|key)\s*[:\-–—]\s*(.*)$/i;
+  const reExp = /^(?:explanation|rationale|discussion|teaching\s+point|why)\s*[:\-–—]\s*(.*)$/i;
+  const reKeyHead = /^answers?\s*(?:key)?\s*:?$/i;
+  const qs = []; let cur = null, field = null, inKey = false; const key = {};
+  const push = () => { if (cur && cur.text) qs.push(cur); cur = null; field = null; };
+  const start = (text, num) => { push(); cur = { text: text.trim(), num, opts: [], letter: null, answerText: null, explanation: '' }; field = 'text'; };
+  for (const line of lines) {
+    if (!line) continue;
+    if (reKeyHead.test(line)) { inKey = true; push(); continue; }
+    if (inKey) {
+      const all = [...line.matchAll(/(\d{1,3})\s*[\.\):\-–—]?\s*\(?([A-Fa-f])(?![a-z])/g)];
+      if (all.length) { all.forEach(m => key[+m[1]] = m[2].toUpperCase()); continue; }
+      inKey = false;
+    }
+    let m;
+    if ((m = line.match(reQ))) { start(m[2], +m[1]); continue; }
+    if ((m = line.match(reQlabel))) { start(m[1]); continue; }
+    if (cur && (m = line.match(reOpt))) { cur.opts.push({ letter: m[1].toUpperCase(), text: m[2].trim() }); field = 'opt'; continue; }
+    if (cur && (m = line.match(reAns))) { const a = m[1].trim(); const lm = a.match(/^\(?([A-Fa-f])(?![a-z0-9])/); if (lm) cur.letter = lm[1].toUpperCase(); else cur.answerText = a; field = 'ans'; continue; }
+    if (cur && (m = line.match(reExp))) { cur.explanation = m[1].trim(); field = 'exp'; continue; }
+    if (cur && field === 'exp') { cur.explanation += ' ' + line; continue; }
+    if (cur && field === 'text') { cur.text += ' ' + line; continue; }
+    if (cur && field === 'opt') { cur.opts[cur.opts.length - 1].text += ' ' + line; continue; }
+    start(line); // unnumbered question after a finished one
+  }
+  push();
+  return qs.map(q => {
+    const letter = q.letter || (q.num && key[q.num]) || null;
+    let correct = null;
+    if (letter) { const i = q.opts.findIndex(o => o.letter === letter); if (i >= 0) correct = i; }
+    else if (q.answerText) { const t = q.answerText.toLowerCase().replace(/[\.\s]+$/, ''); const i = q.opts.findIndex(o => o.text.toLowerCase() === t || o.text.toLowerCase().startsWith(t) || t.startsWith(o.text.toLowerCase())); if (i >= 0) correct = i; }
+    const options = q.opts.map(o => o.text);
+    const mc = options.length >= 2;
+    return { text: q.text.trim(), type: mc ? 'mc' : 'text', options: mc ? options : [], correct: mc ? correct : null, explanation: q.explanation.trim() };
+  });
+}
+function parseTSV(lines) {
+  const qs = [];
+  for (const l of lines) {
+    const c = l.split('\t').map(s => s.trim());
+    if (/^question/i.test(c[0]) && c.length > 1) continue; // header row
+    if (!c[0]) continue;
+    let ai = -1; for (let i = c.length - 1; i >= 1; i--) if (/^[A-Fa-f]$/.test(c[i])) { ai = i; break; }
+    let options = [], correct = null, explanation = '';
+    if (ai > 0) { const idx = c[ai].toUpperCase().charCodeAt(0) - 65; c.slice(1, ai).forEach((o, i) => { if (o) { if (i === idx) correct = options.length; options.push(o); } }); explanation = c.slice(ai + 1).join(' ').trim(); }
+    else options = c.slice(1).filter(Boolean);
+    const mc = options.length >= 2;
+    qs.push({ text: c[0], type: mc ? 'mc' : 'text', options: mc ? options : [], correct: mc ? correct : null, explanation });
+  }
+  return qs;
+}
+
+/* ---- question bank: every question ever created, with how it performed ---- */
+async function bankStats() {
+  const stats = {}; const sessions = await Store.getCol('sessions');
+  for (const s of sessions) {
+    const qs = await Store.getCol(`sessions/${s.id}/questions`), as = await Store.getCol(`sessions/${s.id}/answers`);
+    qs.forEach(q => { const st = stats[q.id] = stats[q.id] || { asked: 0, answered: 0, correct: 0 }; st.asked++; as.filter(a => a.qid === q.id).forEach(a => { st.answered++; if (q.correct != null && a.answer === q.correct) st.correct++; }); });
+  }
+  return stats;
+}
+async function showBank(ctx) {
+  const ov = document.createElement('div'); ov.className = 'overlay';
+  ov.innerHTML = `<div class="modal wide"><p class="muted">Loading…</p></div>`; document.body.appendChild(ov);
+  const close = () => ov.remove();
+  let items = (await Store.getCol('bank')).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+  const stats = await bankStats();
+  const modal = ov.querySelector('.modal');
+  let query = '';
+  const shown = () => { const q = query.toLowerCase(); return items.filter(i => !q || (i.text + ' ' + (i.tags || []).join(' ') + ' ' + (i.sessionName || '')).toLowerCase().includes(q)); };
+  const renderList = () => {
+    const list = shown();
+    modal.querySelector('.banklist').innerHTML = list.map(i => { const st = stats[i.id]; const inS = ctx && ctx.has(i.id);
+      return `<label class="qi"><input type="checkbox" data-id="${esc(i.id)}" ${inS ? 'disabled' : ''}><span class="t" title="${esc(i.text)}">${i.image ? '🖼 ' : ''}${esc(i.text)}</span>${(i.tags || []).map(t => `<span class="chipx">${esc(t)}</span>`).join('')}<span class="tag">${i.type === 'mc' ? (i.correct != null ? 'quiz' : 'poll') : 'text'}</span><span class="stat">${inS ? 'in session' : st ? `asked ${st.asked}× · ${st.answered} ans${i.correct != null && st.answered ? ` · ${Math.round(100 * st.correct / st.answered)}%` : ''}` : 'never asked'}</span><button class="btn xs" data-act="bankdel" data-id="${esc(i.id)}" title="Delete from bank">✕</button></label>`; }).join('') || `<p class="muted" style="padding:12px">${items.length ? 'No matches' : 'Bank is empty. Every question you create is added automatically.'}</p>`;
+    modal.querySelector('#bankcount').textContent = `${list.length} of ${items.length}`;
+  };
+  modal.innerHTML = `<div class="row" style="justify-content:space-between"><h2 style="margin:0">Question bank <span class="muted" id="bankcount" style="font-size:15px;font-weight:400"></span></h2><div class="row"><button class="btn sm" data-act="bankcsv">Export to Excel</button><button class="btn sm" data-act="close">Close</button></div></div>
+    <input id="bankq" placeholder="Search question text, tags, session…" style="margin:10px 0 0">
+    <div class="banklist"></div>
+    ${ctx ? `<div class="row"><button class="btn primary" data-act="bankadd">Add selected to this session</button><button class="btn" data-act="bankall">Select all shown</button></div>` : '<p class="muted" style="font-size:14px;margin:0">Open a session to add questions from the bank.</p>'}`;
+  renderList();
+  modal.querySelector('#bankq').oninput = e => { query = e.target.value; renderList(); };
+  ov.onclick = async e => {
+    if (e.target === ov) return close();
+    const b = e.target.closest('[data-act]'); if (!b) return; const act = b.dataset.act;
+    if (act === 'close') close();
+    else if (act === 'bankall') modal.querySelectorAll('.banklist input:not(:disabled)').forEach(c => c.checked = true);
+    else if (act === 'bankadd') { const ids = [...modal.querySelectorAll('.banklist input:checked')].map(c => c.dataset.id); const picked = items.filter(i => ids.includes(i.id)); if (!picked.length) return; await ctx.add(picked); close(); }
+    else if (act === 'bankdel') { e.preventDefault(); if (!confirm('Remove this question from the bank? (Sessions that already used it keep their copy.)')) return; await Store.del(`bank/${b.dataset.id}`); items = items.filter(i => i.id !== b.dataset.id); renderList(); }
+    else if (act === 'bankcsv') {
+      const rows = [['id', 'added', 'source session', 'tags', 'type', 'question', 'A', 'B', 'C', 'D', 'E', 'F', 'correct', 'explanation', 'sessions asked', 'answers', '% correct', 'has image']];
+      shown().forEach(i => { const st = stats[i.id] || { asked: 0, answered: 0, correct: 0 }; const o = i.options || []; rows.push([i.id, fmtDate(i.createdAt), i.sessionName || '', (i.tags || []).join(', '), i.type === 'mc' ? (i.correct != null ? 'quiz' : 'poll') : 'text', i.text, o[0] || '', o[1] || '', o[2] || '', o[3] || '', o[4] || '', o[5] || '', i.correct != null ? LETTERS[i.correct] : '', i.explanation || '', st.asked, st.answered, i.correct != null && st.answered ? Math.round(100 * st.correct / st.answered) : '', i.image ? 'yes' : '']); });
+      downloadCSV('pccm-question-bank.csv', rows);
+    }
+  };
+}
+function shrinkImage(file) {
+  return new Promise(res => {
+    const img = new Image(); const url = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      const go = (max, q) => { const sc = Math.min(1, max / Math.max(img.width, img.height)); const c = document.createElement('canvas'); c.width = Math.round(img.width * sc); c.height = Math.round(img.height * sc); c.getContext('2d').drawImage(img, 0, 0, c.width, c.height); return c.toDataURL('image/jpeg', q); };
+      let out = go(1400, 0.85); if (out.length > 800000) out = go(1000, 0.75); if (out.length > 800000) out = go(800, 0.6);
+      res(out);
+    };
+    img.src = url;
+  });
+}
+function answerText(q, a) { return q.type === 'mc' ? `${LETTERS[a.answer] || '?'} · ${q.options[a.answer] ?? ''}` : a.answer; }
+function scoreRows(questions, answers, people) {
+  const m = {};
+  (people || []).forEach(p => { m[docKey(p.name)] = { name: p.name, correct: 0, total: 0, text: 0 }; });
+  answers.forEach(a => {
+    const k = docKey(a.name); m[k] = m[k] || { name: a.name, correct: 0, total: 0, text: 0 };
+    const q = questions.find(x => x.id === a.qid); if (!q) return;
+    if (q.type === 'text') { m[k].text++; return; }
+    if (q.correct == null) return;
+    m[k].total++; if (a.answer === q.correct) m[k].correct++;
+  });
+  return Object.values(m).sort((a, b) => b.correct - a.correct || a.name.localeCompare(b.name));
+}
+
+/* ================= ROUTER ================= */
+const subs = [];
+const watch = u => subs.push(u);
+function cleanup() { subs.forEach(u => { try { u(); } catch (e) {} }); subs.length = 0; app.onclick = app.onsubmit = app.onchange = app.onpaste = app.oninput = null; document.onkeydown = null; }
+function route() {
+  cleanup();
+  const parts = location.hash.replace(/^#\/?/, '').split('/');
+  if (parts[0] === 'join' && parts[1]) return FellowView(parts[1].toUpperCase());
+  if (parts[0] === 'present') { if (!pinOK()) return PinView(); return parts[1] ? PresentSession(parts[1].toUpperCase()) : Dashboard(); }
+  HomeView();
+}
+window.addEventListener('hashchange', route);
+
+/* ================= HOME ================= */
+function HomeView() {
+  app.className = 'home';
+  const last = localStorage.getItem('pccm_last');
+  app.innerHTML = `<div class="wrap center"><h1 style="margin-top:60px">${esc(CONFIG.title)}</h1>
+    <form id="jf"><input id="jc" placeholder="Session code" maxlength="4" autocomplete="off" style="text-transform:uppercase;text-align:center;font-size:24px;letter-spacing:4px"><button class="btn primary big">Join</button></form>
+    ${last ? `<p><a href="#/join/${esc(last)}">Rejoin ${esc(last)}</a></p>` : ''}
+    <p class="foot"><a href="#/present">Presenter</a></p></div>`;
+  app.onsubmit = e => { e.preventDefault(); const c = $('#jc').value.trim().toUpperCase(); if (c) location.hash = '#/join/' + c; };
+}
+
+/* ================= PIN ================= */
+function PinView() {
+  app.className = 'home';
+  app.innerHTML = `<div class="wrap center"><h1 style="margin-top:60px">Presenter</h1><form id="pf"><input id="pin" type="password" inputmode="numeric" placeholder="PIN" autofocus><button class="btn primary big">Enter</button></form><p class="foot"><a href="#/">Back</a></p></div>`;
+  app.onsubmit = e => { e.preventDefault(); if ($('#pin').value === CONFIG.teacherPin) { localStorage.setItem('pccm_pin', CONFIG.teacherPin); route(); } else { $('#pin').value = ''; $('#pin').placeholder = 'Wrong PIN'; } };
+}
+
+/* ================= FELLOW ================= */
+function FellowView(code) {
+  const sp = `sessions/${code}`;
+  let name = localStorage.getItem('pccm_name') || '';
+  let session, q = null, mine = null, activeQ = null, lastKey = '', unsubQ = null, unsubA = null, loaded = false;
+  app.className = 'fellow';
+  if (!name) nameForm(); else start();
+
+  function nameForm() {
+    app.innerHTML = `<div class="wrap"><h1 style="margin-top:40px">${esc(CONFIG.title)}</h1><p class="muted">Session <b>${esc(code)}</b></p>
+      <form id="nf"><label>Your name</label><input id="nm" autofocus placeholder="First Last" required maxlength="40" autocomplete="name"><button class="btn primary big">Join</button></form></div>`;
+    app.onsubmit = e => { e.preventDefault(); const v = $('#nm').value.trim(); if (!v) return; name = v; localStorage.setItem('pccm_name', name); start(); };
+  }
+  function start() {
+    localStorage.setItem('pccm_last', code);
+    Store.set(`${sp}/participants/${docKey(name)}`, { name, seenAt: Date.now() });
+    watch(Store.onDoc(sp, s => { session = s; loaded = true; syncQ(); render(); }));
+    app.onclick = e => {
+      const b = e.target.closest('[data-act]'); if (!b) return; e.preventDefault();
+      const act = b.dataset.act;
+      if (act === 'rename') { const v = prompt('Your name', name); if (v && v.trim()) { name = v.trim(); localStorage.setItem('pccm_name', name); lastKey = ''; Store.set(`${sp}/participants/${docKey(name)}`, { name, seenAt: Date.now() }); syncQ(true); render(); } }
+      if (act === 'mc') submit(+b.dataset.i);
+      if (act === 'pick') pick(b.dataset.id);
+    };
+    app.onsubmit = e => { e.preventDefault(); if (e.target.id === 'tf') { const v = $('#ta').value.trim(); if (v) submit(v); } };
+  }
+  function syncQ(force) {
+    const id = session && session.state === 'question' ? session.activeQ : null;
+    if (id === activeQ && !force) return;
+    activeQ = id; q = null; mine = null;
+    if (unsubQ) unsubQ(); if (unsubA) unsubA(); unsubQ = unsubA = null;
+    if (!id) return;
+    unsubQ = Store.onDoc(`${sp}/questions/${id}`, d => { q = d; render(); }); watch(unsubQ);
+    unsubA = Store.onDoc(`${sp}/answers/${id}__${docKey(name)}`, d => { mine = d; render(); }); watch(unsubA);
+  }
+  function submit(answer) {
+    if (!q || mine || (session.phase || 'open') !== 'open') return;
+    mine = { answer }; render();
+    Store.put(`${sp}/answers/${q.id}__${docKey(name)}`, { qid: q.id, name, answer, at: Date.now() });
+  }
+  function pick(id) {
+    const cards = cardList(session); if (cards.some(c => c.byKey === nameKey(name))) return;
+    const c = cards.find(c => c.id === id); if (!c || c.by) return;
+    Store.set(sp, { cards: { [id]: { by: name, byKey: nameKey(name), at: Date.now() } } });
+  }
+  function render() {
+    if (!loaded) return;
+    if (!session) { app.innerHTML = `<div class="wrap center"><h1 style="margin-top:60px">Session ${esc(code)} not found</h1><a class="btn" href="#/">Home</a></div>`; return; }
+    const key = JSON.stringify([session.state, session.activeQ, session.phase, session.cards, q, mine && mine.answer, name]);
+    if (key === lastKey) return; lastKey = key;
+    let body;
+    if (session.state === 'question' && q) body = renderQuestion();
+    else if (session.state === 'cards') body = renderCards();
+    else body = `<div class="center" style="margin-top:60px"><div class="bigcheck">✓</div><h2>You're in, ${esc(name.split(' ')[0])}</h2><p class="muted">Waiting for the next question…</p></div>`;
+    app.innerHTML = `<div class="wrap"><div class="topbar"><span>${esc(session.name || code)}</span><span class="muted">${esc(name)} · <a href="#" data-act="rename">change</a></span></div>${body}</div>`;
+    const ta = $('#ta'); if (ta) ta.focus();
+  }
+  function renderQuestion() {
+    const phase = session.phase || 'open', answered = !!mine;
+    let h = `<div class="qcard">${q.image ? `<img src="${q.image}" alt="">` : ''}<h2>${esc(q.text)}</h2></div>`;
+    if (q.type === 'mc') {
+      h += `<div class="opts">` + (q.options || []).map((o, i) => {
+        let cls = 'opt'; if (answered && mine.answer === i) cls += ' mine';
+        if (phase === 'revealed') { if (i === q.correct) cls += ' right'; else if (answered && mine.answer === i) cls += ' wrong'; }
+        return `<button class="${cls}" data-act="mc" data-i="${i}" ${answered || phase !== 'open' ? 'disabled' : ''}><span class="ltr">${LETTERS[i]}</span><span>${esc(o)}</span></button>`;
+      }).join('') + `</div>`;
+      if (phase === 'revealed' && q.correct != null) h += (answered ? `<p class="status ${mine.answer === q.correct ? 'ok' : 'bad'}">${mine.answer === q.correct ? 'Correct!' : 'Correct answer: ' + LETTERS[q.correct]}</p>` : `<p class="status">Correct answer: ${LETTERS[q.correct]}</p>`) + (q.explanation ? `<div class="expl">${esc(q.explanation)}</div>` : '');
+      else if (phase === 'revealed' && q.explanation) h += `<div class="expl">${esc(q.explanation)}</div>`;
+      else if (answered) h += `<p class="status">Answer locked in ✓</p>`;
+      else if (phase !== 'open') h += `<p class="status">Answering is closed</p>`;
+      else h += `<p class="muted center">Tap an answer</p>`;
+    } else {
+      if (answered) h += `<div class="mine-text">${esc(mine.answer)}</div><p class="status">Submitted ✓</p>`;
+      else if (phase !== 'open') h += `<p class="status">Answering is closed</p>`;
+      else h += `<form id="tf"><textarea id="ta" rows="3" placeholder="Type your answer…" required maxlength="500"></textarea><button class="btn primary big">Submit</button></form>`;
+    }
+    return h;
+  }
+  function renderCards() {
+    const cards = cardList(session);
+    if (!cards.length) return `<div class="center" style="margin-top:60px"><h2>Cards coming up…</h2></div>`;
+    const my = cards.find(c => c.byKey === nameKey(name));
+    let h = my ? `<div class="qcard mycard"><div class="muted">Your card</div><h2>${esc(my.topic)}</h2><p class="muted" style="margin:8px 0 0">Explain it to the group — talk it through or draw it on the board.</p></div>` : `<h2 class="center">Pick a card</h2>`;
+    h += `<div class="cardgrid">` + cards.map((c, i) => c.by ? `<div class="pcard up"><div class="topic">${esc(c.topic)}</div><div class="who">${esc(c.by)}</div></div>` : `<button class="pcard down" data-act="pick" data-id="${esc(c.id)}" ${my ? 'disabled' : ''}>${i + 1}</button>`).join('') + `</div>`;
+    return h;
+  }
+}
+
+/* ================= DASHBOARD ================= */
+function Dashboard() {
+  app.className = 'dash';
+  app.innerHTML = `<div class="wrap wide"><div class="row" style="justify-content:space-between"><h1>${esc(CONFIG.title)} · Sessions</h1><div class="row"><button class="btn" data-act="bank">Question bank</button><button class="btn" data-act="alltime">All-time scores</button><a class="btn" href="#/">Exit</a></div></div>
+    ${modeBanner()}
+    <form id="nf" class="row" style="margin:14px 0"><input id="sname" placeholder="Session name" value="${esc(fmtDate(Date.now()))} rounds" style="flex:1;margin:0"><button class="btn primary">New session</button></form>
+    <div class="slist" id="slist"></div></div>`;
+  watch(Store.onCol('sessions', list => {
+    list.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+    $('#slist').innerHTML = list.length ? list.map(s => `<div class="card"><div class="sn"><b>${esc(s.name || s.id)}</b><div class="muted" style="font-size:14px">${fmtDate(s.createdAt)} · code ${esc(s.id)}</div></div><a class="btn primary sm" href="#/present/${esc(s.id)}">Open</a><button class="btn sm danger" data-act="del" data-id="${esc(s.id)}">Delete</button></div>`).join('') : `<p class="muted">No sessions yet. Create one above.</p>`;
+  }));
+  app.onsubmit = async e => {
+    e.preventDefault(); const code = genCode();
+    await Store.put(`sessions/${code}`, { name: $('#sname').value.trim() || code, createdAt: Date.now(), state: 'lobby', activeQ: null, phase: 'open', cards: {} });
+    location.hash = '#/present/' + code;
+  };
+  app.onclick = async e => {
+    const b = e.target.closest('[data-act]'); if (!b) return;
+    if (b.dataset.act === 'alltime') showAllTime();
+    if (b.dataset.act === 'bank') showBank(null);
+    if (b.dataset.act === 'del') {
+      const id = b.dataset.id; if (!confirm(`Delete session ${id} and all its answers?`)) return;
+      for (const sub of ['questions', 'answers', 'participants']) for (const d of await Store.getCol(`sessions/${id}/${sub}`)) await Store.del(`sessions/${id}/${sub}/${d.id}`);
+      await Store.del(`sessions/${id}`);
+    }
+  };
+}
+
+/* ================= ALL-TIME SCORES ================= */
+async function showAllTime() {
+  const ov = document.createElement('div'); ov.className = 'overlay';
+  ov.innerHTML = `<div class="modal"><p class="muted">Loading…</p></div>`; document.body.appendChild(ov);
+  ov.onclick = e => { if (e.target === ov || e.target.dataset.act === 'close') ov.remove(); };
+  const sessions = (await Store.getCol('sessions')).sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
+  const agg = {}, csv = [['session', 'date', 'name', 'question', 'answer', 'correct']];
+  for (const s of sessions) {
+    const qs = await Store.getCol(`sessions/${s.id}/questions`), as = await Store.getCol(`sessions/${s.id}/answers`), ps = await Store.getCol(`sessions/${s.id}/participants`);
+    scoreRows(qs, as, ps).forEach(r => { const k = docKey(r.name); const a = agg[k] = agg[k] || { name: r.name, sessions: 0, correct: 0, total: 0, text: 0 }; a.sessions++; a.correct += r.correct; a.total += r.total; a.text += r.text; });
+    as.forEach(a => { const q = qs.find(x => x.id === a.qid); if (q) csv.push([s.name || s.id, fmtDate(s.createdAt), a.name, q.text, answerText(q, a), q.type === 'mc' && q.correct != null ? (a.answer === q.correct ? 'yes' : 'no') : '']); });
+  }
+  const rows = Object.values(agg).sort((a, b) => (b.total ? b.correct / b.total : 0) - (a.total ? a.correct / a.total : 0) || a.name.localeCompare(b.name));
+  ov.querySelector('.modal').innerHTML = `<div class="row" style="justify-content:space-between"><h2>All-time scores</h2><div class="row"><button class="btn sm" id="csvall">Export CSV</button><button class="btn sm" data-act="close">Close</button></div></div>
+    <p class="muted">${sessions.length} session${sessions.length === 1 ? '' : 's'}. Quiz = multiple choice with a marked correct answer.</p>
+    <table><tr><th>Fellow</th><th class="num">Sessions</th><th class="num">Quiz correct</th><th class="num">Quiz answered</th><th class="num">%</th><th class="num">Text answers</th></tr>
+    ${rows.map(r => `<tr><td>${esc(r.name)}</td><td class="num">${r.sessions}</td><td class="num">${r.correct}</td><td class="num">${r.total}</td><td class="num">${r.total ? Math.round(100 * r.correct / r.total) : '–'}</td><td class="num">${r.text}</td></tr>`).join('') || '<tr><td colspan="6" class="muted">No answers yet</td></tr>'}</table>`;
+  $('#csvall').onclick = () => downloadCSV('pccm-poll-all-sessions.csv', csv);
+}
+
+/* ================= PRESENTER SESSION ================= */
+function PresentSession(code) {
+  const sp = `sessions/${code}`;
+  const S = { session: undefined, questions: [], answers: [], people: [], editing: null, image: null, nOpts: 4, tab: 'questions' };
+  app.className = 'present panel-open';
+  app.innerHTML = `
+    <header class="ph">
+      <a href="#/present" class="btn sm">← Sessions</a>
+      <div class="ptitle" id="ptitle" data-act="rename" title="Click to rename"></div>
+      <div class="join"><span class="muted">Join at</span> <b>${esc(shortUrl())}</b><span class="code">${esc(code)}</span></div>
+      <div id="qrsm"></div>
+      <button class="btn sm" data-act="lobby">Lobby / QR</button>
+      <button class="btn sm" data-act="cardsmode">Cards</button>
+      <button class="btn sm primary" data-act="panel">Manage</button>
+    </header>
+    <div class="pbody">
+      <main id="stage"></main>
+      <aside id="panel">
+        <div class="tabs"><button data-tab="questions" class="on">Questions</button><button data-tab="import">Import</button><button data-tab="cards">Cards</button><button data-tab="scores">Scores</button></div>
+        <section id="tab-questions">
+          <div id="qlist"></div>
+          <div class="row" style="margin-top:8px"><button class="btn sm" data-act="bank">＋ From question bank</button><button class="btn sm" data-tab="import">＋ Paste many</button></div>
+          <form id="qform">
+            <h3 id="qformtitle">New question</h3>
+            <textarea id="qtext" rows="2" placeholder="Question text (Ctrl/⌘+Enter to save)" required></textarea>
+            <div class="row" style="font-size:15px"><label><input type="radio" name="qtype" value="mc" checked>Multiple choice</label><label><input type="radio" name="qtype" value="text">Free text</label></div>
+            <div id="optsbox"></div>
+            <div class="drop" id="drop">Image: <label class="link">choose file<input type="file" id="qimg" accept="image/*" hidden></label>, paste (⌘V), or drop here<div id="imgprev"></div></div>
+            <textarea id="qexp" rows="2" placeholder="Explanation, shown to everyone after reveal (optional)"></textarea>
+            <input id="qtags" placeholder="Topic tags, comma-separated (optional) e.g. ARDS, ventilator">
+            <div class="row"><button class="btn primary">Save question</button><button type="button" class="btn" data-act="cancel" id="cancelbtn" hidden>Cancel</button></div>
+          </form>
+        </section>
+        <section id="tab-import" hidden>
+          <h3>Paste many questions</h3>
+          <p class="muted" style="font-size:14px;margin:0 0 6px">Paste output from ChatGPT, OpenEvidence, Claude, or rows copied from Excel. Numbered stems, lettered options, <b>Answer: B</b>, optional <b>Explanation:</b>. Questions without options become free-text.</p>
+          <details><summary>Copy a prompt that produces the right format</summary>
+            <div class="row" style="margin:6px 0"><input id="ptopic" placeholder="Topic, e.g. ARDS and mechanical ventilation" style="flex:1;margin:0"><input id="pnum" type="number" value="10" min="1" max="50" style="width:70px;margin:0"></div>
+            <textarea id="promptbox" rows="9" readonly></textarea>
+            <button type="button" class="btn sm" data-act="copyprompt">Copy prompt</button> <span class="muted" id="copied" style="font-size:13px"></span>
+          </details>
+          <textarea id="imptext" rows="12" placeholder="1. A 58-year-old with septic shock…&#10;A. Norepinephrine&#10;B. Dopamine&#10;C. Phenylephrine&#10;D. Epinephrine&#10;Answer: A&#10;Explanation: …&#10;&#10;2. …" style="margin-top:8px"></textarea>
+          <input id="imptags" placeholder="Topic tags for all of these (optional)">
+          <div class="row"><button class="btn primary" data-act="parse">Preview</button><span class="muted" id="impcount" style="font-size:14px"></span></div>
+          <div id="imppreview"></div>
+        </section>
+        <section id="tab-cards" hidden>
+          <h3>Topic cards</h3>
+          <p class="muted" style="font-size:14px;margin:0 0 6px">Fellows pick a face-down card on their phone, then explain the topic out loud or draw it on the board.</p>
+          <textarea id="cardtopics" rows="4" placeholder="One topic per line&#10;e.g. Ventilator waveforms&#10;Oxygen–hemoglobin dissociation curve"></textarea>
+          <div class="row"><button class="btn primary sm" data-act="addcards">Add topics</button><button class="btn sm" data-act="cardsmode">Show on screen</button><button class="btn sm" data-act="resetdraws">Reset draws</button><button class="btn sm danger" data-act="clearcards">Delete all</button></div>
+          <div id="cardlist"></div>
+        </section>
+        <section id="tab-scores" hidden>
+          <div class="row" style="justify-content:space-between"><h3>This session</h3><div class="row"><button class="btn xs" data-act="csv">Export CSV</button><button class="btn xs" data-act="alltime">All-time</button></div></div>
+          <div id="scores"></div>
+        </section>
+      </aside>
+    </div>`;
+  makeQR($('#qrsm'), joinUrl(code), 48);
+  buildOpts();
+
+  watch(Store.onDoc(sp, s => { S.session = s; renderHeader(); renderStage(); renderCards(); renderQList(); }));
+  watch(Store.onCol(`${sp}/questions`, d => { S.questions = d.sort((a, b) => (a.order || 0) - (b.order || 0)); renderQList(); renderStage(); renderScores(); }));
+  watch(Store.onCol(`${sp}/answers`, d => { S.answers = d; renderStage(); renderScores(); }));
+  watch(Store.onCol(`${sp}/participants`, d => { S.people = d.sort((a, b) => a.name.localeCompare(b.name)); renderStage(); renderScores(); }));
+
+  const setSession = d => Store.set(sp, d);
+  const present = id => setSession({ state: 'question', activeQ: id, phase: 'open' });
+  const currentIdx = () => S.session && S.session.state === 'question' ? S.questions.findIndex(q => q.id === S.session.activeQ) : -1;
+  const nextQ = () => { const q = S.questions[currentIdx() + 1]; if (q) present(q.id); else if (currentIdx() >= 0) setSession({ state: 'lobby', activeQ: null }); };
+  const prevQ = () => { const q = S.questions[currentIdx() - 1]; if (q) present(q.id); };
+  // Adds questions to the session and the bank. Reuses ids for bank questions so stats accumulate across sessions.
+  async function addQuestions(list, opts = {}) {
+    const existing = new Set(S.questions.map(q => q.id)); let n = 0; const base = Date.now();
+    for (const [i, q] of list.entries()) {
+      const id = q.id && !existing.has(q.id) ? q.id : (q.id && existing.has(q.id) ? null : newId()); if (!id) continue;
+      const data = { text: q.text, type: q.type, options: q.options || [], correct: q.correct ?? null, image: q.image || null, explanation: q.explanation || '', tags: q.tags || [] };
+      await Store.put(`${sp}/questions/${id}`, { ...data, order: base + i, createdAt: q.createdAt || base + i });
+      if (!opts.skipBank) await Store.set(`bank/${id}`, { ...data, createdAt: q.createdAt || base + i, source: code, sessionName: (S.session && S.session.name) || code });
+      n++;
+    }
+    return n;
+  }
+  const bankCtx = () => ({ has: id => S.questions.some(q => q.id === id), add: list => addQuestions(list, { skipBank: true }) });
+  document.onkeydown = e => {
+    if (e.target.matches('input,textarea,select') || e.metaKey || e.ctrlKey || e.altKey || document.querySelector('.overlay')) return;
+    const s = S.session; if (!s) return; const k = e.key;
+    if (k === 'ArrowRight' || k === 'PageDown') { e.preventDefault(); nextQ(); }
+    else if (k === 'ArrowLeft' || k === 'PageUp') { e.preventDefault(); prevQ(); }
+    else if (k === ' ' && s.state === 'question') { e.preventDefault(); setSession({ phase: s.phase === 'open' ? 'closed' : 'open' }); }
+    else if ((k === 'r' || k === 'R') && s.state === 'question') setSession({ phase: 'revealed' });
+    else if (k === 'l' || k === 'L') setSession({ state: 'lobby', activeQ: null });
+    else if (k === 'c' || k === 'C') setSession({ state: 'cards' });
+    else if (k === 'm' || k === 'M') app.classList.toggle('panel-open');
+  };
+
+  /* ---- renders ---- */
+  function renderHeader() { if (S.session) { $('#ptitle').textContent = S.session.name || code; document.title = `${S.session.name || code} · ${CONFIG.title}`; } }
+  function renderStage() {
+    const s = S.session, st = $('#stage'); if (s === undefined) return;
+    if (!s) { st.innerHTML = `<h2>Session not found</h2>`; return; }
+    if (s.state === 'question' && s.activeQ) { const q = S.questions.find(x => x.id === s.activeQ); st.innerHTML = q ? stageQuestion(q, s) : ''; return; }
+    if (s.state === 'cards') { st.innerHTML = stageCards(s); return; }
+    st.innerHTML = `<div class="lobby"><div class="url">${esc(shortUrl())}</div><div class="bigcode">${esc(code)}</div><div style="margin:18px 0"><div id="qrbig"></div></div>
+      <div class="muted">Scan, enter your name, and wait.</div>
+      <div class="chips">${S.people.map(p => `<span class="chip">${esc(p.name)}</span>`).join('') || '<span class="muted">Nobody here yet</span>'}</div></div>`;
+    makeQR($('#qrbig'), joinUrl(code), 240);
+  }
+  function stageQuestion(q, s) {
+    const ans = S.answers.filter(a => a.qid === q.id), phase = s.phase || 'open', n = S.people.length, idx = S.questions.findIndex(x => x.id === q.id);
+    let results;
+    if (q.type === 'mc') {
+      const counts = q.options.map((_, i) => ans.filter(a => a.answer === i).length), max = Math.max(1, ...counts), show = phase !== 'open';
+      results = `<div class="bars">` + q.options.map((o, i) => `<div class="bar ${phase === 'revealed' && i === q.correct ? 'right' : ''}"><div class="lbl"><span class="ltr">${LETTERS[i]}</span><span>${esc(o)}</span></div><div class="track"><div class="fill" style="width:${show ? counts[i] / max * 100 : 0}%"></div></div><div class="cnt">${show ? counts[i] : ''}</div></div>`).join('') + `</div>`;
+    } else {
+      results = `<div class="texts">` + ans.sort((a, b) => a.at - b.at).map(a => `<div class="tx"><b>${esc(a.name)}</b>${esc(a.answer)}</div>`).join('') + `</div>`;
+    }
+    const next = S.questions[idx + 1];
+    return `<div class="stageq">${q.image ? `<img class="qimg" src="${q.image}" alt="">` : ''}<h1 class="qtext">${esc(q.text)}</h1>${results}
+      ${phase === 'revealed' && q.explanation ? `<div class="expl">${esc(q.explanation)}</div>` : ''}
+      <div class="controls"><span class="pill ${phase}">${phase.toUpperCase()}</span><span class="muted"><b>${ans.length}</b> / ${n} answered</span>
+      ${phase === 'open' ? `<button class="btn" data-act="phase" data-p="closed">Close &amp; show results</button>` : `<button class="btn" data-act="phase" data-p="open">Reopen</button>`}
+      ${q.type === 'mc' && q.correct != null && phase !== 'revealed' ? `<button class="btn" data-act="phase" data-p="revealed">Reveal answer</button>` : ''}
+      ${next ? `<button class="btn primary" data-act="present" data-id="${esc(next.id)}">Next ▶</button>` : `<button class="btn" data-act="lobby">Done</button>`}
+      <span class="muted">Q ${idx + 1} of ${S.questions.length}</span><span class="hint">→ next · space close/open · R reveal · M panel · clicker works</span></div></div>`;
+  }
+  function stageCards(s) {
+    const cards = cardList(s);
+    return `<div class="stagecards"><h1>Pick a card</h1>${cards.length ? '' : '<p class="muted">Add topics under Manage → Cards.</p>'}<div class="cardgrid big">${cards.map((c, i) => c.by ? `<div class="pcard up"><div class="topic">${esc(c.topic)}</div><div class="who">${esc(c.by)}</div></div>` : `<button class="pcard down" data-act="pdraw" data-id="${esc(c.id)}" title="Assign this card to someone">${i + 1}</button>`).join('')}</div></div>`;
+  }
+  function renderQList() {
+    const act = S.session && S.session.state === 'question' ? S.session.activeQ : null;
+    $('#qlist').innerHTML = S.questions.length ? S.questions.map((q, i) => `<div class="qi ${q.id === act ? 'active' : ''}"><span class="n">${i + 1}</span><span class="t" title="${esc(q.text)}">${q.image ? '🖼 ' : ''}${esc(q.text)}</span><span class="tag">${q.type === 'mc' ? (q.correct != null ? 'quiz' : 'poll') : 'text'}</span><button class="btn xs primary" data-act="present" data-id="${esc(q.id)}" title="Present">▶</button><button class="btn xs" data-act="edit" data-id="${esc(q.id)}" title="Edit">✎</button><button class="btn xs" data-act="delq" data-id="${esc(q.id)}" title="Delete">✕</button></div>`).join('') : `<p class="muted" style="font-size:14px">No questions yet — add one below.</p>`;
+  }
+  function renderCards() {
+    const cards = cardList(S.session);
+    $('#cardlist').innerHTML = cards.map(c => `<div class="qi"><span class="t">${esc(c.topic)}</span>${c.by ? `<span class="tag">${esc(c.by)}</span>` : ''}<button class="btn xs" data-act="delcard" data-id="${esc(c.id)}">✕</button></div>`).join('');
+  }
+  function renderScores() {
+    const rows = scoreRows(S.questions, S.answers, S.people), nQuiz = S.questions.filter(q => q.type === 'mc' && q.correct != null).length;
+    $('#scores').innerHTML = `<p class="muted" style="font-size:13px;margin:0 0 6px">${nQuiz} quiz question${nQuiz === 1 ? '' : 's'} · ${S.people.length} joined</p><table><tr><th>Fellow</th><th class="num">Correct</th><th class="num">Answered</th><th class="num">Text</th></tr>${rows.map(r => `<tr><td>${esc(r.name)}</td><td class="num">${r.correct}</td><td class="num">${r.total}</td><td class="num">${r.text}</td></tr>`).join('') || '<tr><td colspan="4" class="muted">No one yet</td></tr>'}</table>`;
+  }
+
+  /* ---- question form ---- */
+  function buildOpts(vals, correct) {
+    const box = $('#optsbox');
+    box.innerHTML = Array.from({ length: S.nOpts }, (_, i) => `<div class="optrow"><input type="radio" name="correct" value="${i}" title="Mark as correct" ${correct === i ? 'checked' : ''}><span class="ltr">${LETTERS[i]}</span><input type="text" class="optin" placeholder="Option ${LETTERS[i]}" value="${esc(vals ? vals[i] || '' : '')}"></div>`).join('')
+      + `<div class="row" style="font-size:13px;justify-content:space-between"><span class="muted">◉ = correct answer (leave none for a poll)</span>${S.nOpts < 6 ? `<button type="button" class="link" data-act="addopt">+ option</button>` : ''}</div>`;
+    box.hidden = $('input[name=qtype]:checked').value !== 'mc';
+  }
+  function setImage(data) { S.image = data; $('#imgprev').innerHTML = data ? `<img src="${data}" alt=""><button type="button" class="link" data-act="rmimg">remove image</button>` : ''; }
+  async function fileToImage(f) { if (f && f.type.startsWith('image/')) setImage(await shrinkImage(f)); }
+  function resetForm() {
+    S.editing = null; setImage(null); S.nOpts = 4; $('#qtext').value = ''; $('#qexp').value = ''; $('#qtags').value = ''; $('#qformtitle').textContent = 'New question'; $('#cancelbtn').hidden = true; buildOpts();
+  }
+  function loadForm(q) {
+    S.editing = q.id; $('#qtext').value = q.text; $('#qexp').value = q.explanation || ''; $('#qtags').value = (q.tags || []).join(', '); $('#qformtitle').textContent = 'Edit question'; $('#cancelbtn').hidden = false;
+    ['questions', 'import', 'cards', 'scores'].forEach(t => $('#tab-' + t).hidden = t !== 'questions'); document.querySelectorAll('.tabs button').forEach(b => b.classList.toggle('on', b.dataset.tab === 'questions'));
+    $(`input[name=qtype][value=${q.type}]`).checked = true; S.nOpts = Math.max(4, (q.options || []).length); buildOpts(q.options, q.correct); setImage(q.image || null);
+    $('#qtext').focus();
+  }
+  async function saveForm() {
+    const text = $('#qtext').value.trim(); if (!text) return;
+    const type = $('input[name=qtype]:checked').value;
+    let options = [], correct = null;
+    if (type === 'mc') {
+      const raw = [...document.querySelectorAll('.optin')].map(i => i.value.trim());
+      const chosen = $('input[name=correct]:checked'); const ci = chosen ? +chosen.value : -1;
+      raw.forEach((v, i) => { if (v) { if (i === ci) correct = options.length; options.push(v); } });
+      if (options.length < 2) { alert('Give at least two options.'); return; }
+    }
+    const data = { text, type, options, correct, image: S.image || null, explanation: $('#qexp').value.trim(), tags: splitTags($('#qtags').value) };
+    if (S.editing) { await Store.set(`${sp}/questions/${S.editing}`, data); await Store.set(`bank/${S.editing}`, data); }
+    else await addQuestions([data]);
+    resetForm(); $('#qtext').focus();
+  }
+  /* ---- bulk import ---- */
+  let parsed = [];
+  function refreshPrompt() { $('#promptbox').value = gptPrompt($('#ptopic').value.trim(), +$('#pnum').value || 10); }
+  function previewImport() {
+    parsed = parseBulk($('#imptext').value);
+    const box = $('#imppreview');
+    if (!parsed.length) { box.innerHTML = `<p class="warn">Nothing recognized. Each question needs a stem line (numbered helps), then options like "A. …", then "Answer: B".</p>`; $('#impcount').textContent = ''; return; }
+    const noAns = parsed.filter(q => q.type === 'mc' && q.correct == null).length;
+    $('#impcount').textContent = `${parsed.length} question${parsed.length === 1 ? '' : 's'} found`;
+    box.innerHTML = `<table class="imp"><tr><th>#</th><th>Question</th><th>Type</th><th>Ans</th></tr>${parsed.map((q, i) => `<tr><td>${i + 1}</td><td>${esc(q.text.slice(0, 90))}${q.text.length > 90 ? '…' : ''}${q.explanation ? ' <span class="chipx">expl</span>' : ''}</td><td>${q.type === 'mc' ? q.options.length + ' opts' : 'text'}</td><td class="${q.type === 'mc' && q.correct == null ? 'warn' : ''}">${q.type === 'mc' ? (q.correct != null ? LETTERS[q.correct] : '?') : '–'}</td></tr>`).join('')}</table>
+      ${noAns ? `<p class="warn" style="font-size:13px">${noAns} multiple-choice question${noAns === 1 ? ' has' : 's have'} no correct answer marked (they'll run as polls; you can edit them after adding).</p>` : ''}
+      <div class="row" style="margin-top:8px"><button class="btn primary" data-act="importadd">Add ${parsed.length} to session</button><button class="btn" data-act="importclear">Clear</button></div>`;
+  }
+
+  /* ---- events ---- */
+  app.onsubmit = e => { e.preventDefault(); if (e.target.id === 'qform') saveForm(); };
+  app.onchange = e => {
+    if (e.target.name === 'qtype') $('#optsbox').hidden = e.target.value !== 'mc';
+    if (e.target.id === 'qimg') { fileToImage(e.target.files[0]); e.target.value = ''; }
+  };
+  app.onpaste = e => { const f = [...(e.clipboardData?.items || [])].find(i => i.type.startsWith('image/')); if (f && e.target.closest('#qform')) { e.preventDefault(); fileToImage(f.getAsFile()); } };
+  $('#qtext').addEventListener('keydown', e => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); saveForm(); } });
+  const drop = $('#drop');
+  drop.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('over'); });
+  drop.addEventListener('dragleave', () => drop.classList.remove('over'));
+  drop.addEventListener('drop', e => { e.preventDefault(); drop.classList.remove('over'); fileToImage(e.dataTransfer.files[0]); });
+
+  app.onclick = async e => {
+    const tab = e.target.closest('[data-tab]');
+    if (tab) { S.tab = tab.dataset.tab; document.querySelectorAll('.tabs button').forEach(b => b.classList.toggle('on', b.dataset.tab === S.tab)); ['questions', 'import', 'cards', 'scores'].forEach(t => $('#tab-' + t).hidden = t !== S.tab); if (S.tab === 'import') { refreshPrompt(); $('#imptext').focus(); } return; }
+    const b = e.target.closest('[data-act]'); if (!b) return;
+    const act = b.dataset.act, id = b.dataset.id;
+    if (act === 'panel') app.classList.toggle('panel-open');
+    else if (act === 'lobby') setSession({ state: 'lobby', activeQ: null });
+    else if (act === 'cardsmode') setSession({ state: 'cards' });
+    else if (act === 'present') present(id);
+    else if (act === 'phase') setSession({ phase: b.dataset.p });
+    else if (act === 'rename') { const v = prompt('Session name', S.session.name || ''); if (v && v.trim()) setSession({ name: v.trim() }); }
+    else if (act === 'edit') loadForm(S.questions.find(q => q.id === id));
+    else if (act === 'delq') { if (confirm('Delete this question?')) { await Store.del(`${sp}/questions/${id}`); if (S.editing === id) resetForm(); } }
+    else if (act === 'addopt') { const vals = [...document.querySelectorAll('.optin')].map(i => i.value); const c = $('input[name=correct]:checked'); S.nOpts = Math.min(6, S.nOpts + 1); buildOpts(vals, c ? +c.value : null); }
+    else if (act === 'cancel') resetForm();
+    else if (act === 'rmimg') setImage(null);
+    else if (act === 'addcards') {
+      const lines = $('#cardtopics').value.split('\n').map(s => s.trim()).filter(Boolean); if (!lines.length) return;
+      const base = Date.now(), cards = {}; lines.forEach((t, i) => cards['c' + (base + i).toString(36)] = { topic: t, order: base + i, by: null, byKey: null });
+      await setSession({ cards }); $('#cardtopics').value = '';
+    }
+    else if (act === 'delcard') setSession({ cards: { [id]: null } });
+    else if (act === 'resetdraws') { const cards = {}; cardList(S.session).forEach(c => cards[c.id] = { by: null, byKey: null }); setSession({ cards }); }
+    else if (act === 'clearcards') { if (confirm('Delete all cards?')) { const cards = {}; cardList(S.session).forEach(c => cards[c.id] = null); setSession({ cards }); } }
+    else if (act === 'pdraw') { const who = prompt('Who is presenting this card?'); if (who && who.trim()) setSession({ cards: { [id]: { by: who.trim(), byKey: nameKey(who), at: Date.now() } } }); }
+    else if (act === 'csv') {
+      const rows = [['name', 'question', 'answer', 'correct']];
+      S.questions.forEach(q => S.answers.filter(a => a.qid === q.id).forEach(a => rows.push([a.name, q.text, answerText(q, a), q.type === 'mc' && q.correct != null ? (a.answer === q.correct ? 'yes' : 'no') : ''])));
+      downloadCSV(`pccm-poll-${code}.csv`, rows);
+    }
+    else if (act === 'alltime') showAllTime();
+    else if (act === 'bank') showBank(bankCtx());
+    else if (act === 'parse') previewImport();
+    else if (act === 'importclear') { $('#imptext').value = ''; $('#imppreview').innerHTML = ''; $('#impcount').textContent = ''; parsed = []; }
+    else if (act === 'importadd') {
+      const tags = splitTags($('#imptags').value); b.disabled = true; b.textContent = 'Adding…';
+      const n = await addQuestions(parsed.map(q => ({ ...q, tags })));
+      $('#imptext').value = ''; $('#imppreview').innerHTML = `<p class="status ok">Added ${n} question${n === 1 ? '' : 's'}. They're in the Questions tab.</p>`; $('#impcount').textContent = ''; parsed = [];
+    }
+    else if (act === 'copyprompt') {
+      refreshPrompt(); const t = $('#promptbox'); t.select();
+      try { await navigator.clipboard.writeText(t.value); $('#copied').textContent = 'Copied — paste it into ChatGPT / OpenEvidence.'; } catch (err) { document.execCommand && document.execCommand('copy'); $('#copied').textContent = 'Selected — press ⌘C / Ctrl+C to copy.'; }
+    }
+  };
+  app.oninput = e => { if (e.target.id === 'ptopic' || e.target.id === 'pnum') refreshPrompt(); };
+}
+
+route();
+</script>
+</body>
+</html>

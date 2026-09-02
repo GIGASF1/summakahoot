@@ -1,0 +1,13 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Open read/write: the app has no accounts by design (fellows just type a name).
+    // Access is limited only by knowing the URL. Fine for classroom polling, not for anything sensitive.
+    match /sessions/{session} {
+      allow read, write: if true;
+      match /{sub=**} {
+        allow read, write: if true;
+      }
+    }
+  }
+}
